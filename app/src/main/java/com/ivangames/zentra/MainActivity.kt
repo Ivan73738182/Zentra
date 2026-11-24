@@ -175,6 +175,18 @@ class MainActivity : Activity() {
 
         // Логика
         fun applyLink() {
+            val raw0 = input.text.toString().trim()
+            if (raw0.startsWith("http://") || raw0.startsWith("https://")) {
+                status.text = "Загружаю подписку…"
+                status.setTextColor(Color.WHITE)
+                Subscription.fetch(raw0) { links ->
+                    runOnUiThread {
+                        input.setText(links.firstOrNull() ?: "-")
+                        applyLink()
+                    }
+                }
+                return
+            }
             val s = LinkParser.parse(input.text.toString())
             if (s == null) {
                 server = null
@@ -202,6 +214,33 @@ class MainActivity : Activity() {
             applyLink()
         }
         applyBtn.setOnClickListener { applyLink() }
+
+        ZentraVpnService.listener = { on, msg ->
+            runOnUiThread {
+                if (on) {
+                    status.text = "Подключено"
+                    status.setTextColor(c("#3DDC97"))
+                    hintText.text = "VPN работает"
+                    power.text = "СТОП"
+                } else {
+                    status.text = if (msg.isEmpty()) "Отключено" else "Ошибка"
+                    status.setTextColor(if (msg.isEmpty()) Color.WHITE else c("#FF6B6B"))
+                    hintText.text = if (msg.isEmpty()) "Нажми ПУСК" else msg
+                    power.text = "ПУСК"
+                }
+            }
+        }
+        power.setOnClickListener {
+            if (ZentraVpnService.running) {
+                startService(Intent(this, ZentraVpnService::class.java).setAction(ZentraVpnService.ACTION_STOP))
+            } else if (server == null) {
+                status.text = "Сначала вставь ссылку"
+                status.setTextColor(c("#FF6B6B"))
+            } else {
+                val prep = VpnService.prepare(this)
+                if (prep != null) startActivityForResult(prep, 100) else startVpn()
+            }
+        }
         val unusedOld = View.OnClickListener {
             if (server == null) {
                 status.text = "Сначала вставь ссылку"
