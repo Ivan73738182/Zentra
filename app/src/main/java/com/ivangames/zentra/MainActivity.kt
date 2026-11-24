@@ -103,7 +103,7 @@ class MainActivity : Activity() {
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
         }
-        val hint = TextView(this).apply {
+        val hintText = TextView(this).apply {
             text = "Сервер не выбран"
             textSize = 13f
             setTextColor(c("#7C879E"))
@@ -112,7 +112,7 @@ class MainActivity : Activity() {
         root.addView(status, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { topMargin = dp(24) })
-        root.addView(hint)
+        root.addView(hintText)
 
         // Карточка сервера
         val serverName = TextView(this).apply {
@@ -179,7 +179,7 @@ class MainActivity : Activity() {
                 serverCard.visibility = View.GONE
                 status.text = "Не удалось распознать ссылку"
                 status.setTextColor(c("#FF6B6B"))
-                hint.text = "Проверь, что ссылка скопирована целиком"
+                hintText.text = "Проверь, что ссылка скопирована целиком"
                 power.background = circle("#162040", "#4F8CFF", 4)
             } else {
                 server = s
@@ -188,7 +188,7 @@ class MainActivity : Activity() {
                 serverCard.visibility = View.VISIBLE
                 status.text = "Сервер выбран"
                 status.setTextColor(c("#3DDC97"))
-                hint.text = "Нажми ПУСК"
+                hintText.text = "Нажми ПУСК"
                 power.background = circle("#12302A", "#3DDC97", 4)
             }
         }
