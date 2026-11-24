@@ -1,6 +1,8 @@
 package com.ivangames.zentra
 
 import android.app.Activity
+import android.content.Intent
+import android.net.VpnService
 import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Color
@@ -200,7 +202,7 @@ class MainActivity : Activity() {
             applyLink()
         }
         applyBtn.setOnClickListener { applyLink() }
-        power.setOnClickListener {
+        val unusedOld = View.OnClickListener {
             if (server == null) {
                 status.text = "Сначала вставь ссылку"
                 status.setTextColor(c("#FF6B6B"))
@@ -211,5 +213,19 @@ class MainActivity : Activity() {
         }
 
         setContentView(root)
+    }
+
+    private fun startVpn() {
+        val s = server ?: return
+        val intent = Intent(this, ZentraVpnService::class.java)
+            .setAction(ZentraVpnService.ACTION_START)
+            .putExtra(ZentraVpnService.EXTRA_CONFIG, ConfigBuilder.build(s))
+        startService(intent)
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 100 && resultCode == RESULT_OK) startVpn()
     }
 }
