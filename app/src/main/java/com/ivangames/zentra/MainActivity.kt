@@ -30,11 +30,22 @@ class MainActivity : Activity() {
         val button = Button(this).apply { text = "Подключить" }
         val status = TextView(this).apply {
             text = "Не подключено"
-            setTextColor(Color.GRAY)
+            textSize = 16f
+            setTextColor(Color.LTGRAY)
             setPadding(0, 32, 0, 0)
         }
+
         button.setOnClickListener {
-            status.text = "Ссылка: " + input.text.toString().take(60)
+            val server = LinkParser.parse(input.text.toString())
+            if (server == null) {
+                status.text = "Не удалось распознать ссылку"
+            } else {
+                val extra = server.params.entries.joinToString("\n") { "${it.key} = ${it.value}" }
+                status.text = "Протокол: ${server.protocol.uppercase()}\n" +
+                    "Имя: ${server.name}\n" +
+                    "Адрес: ${server.host}:${server.port}\n" +
+                    "ID: ${server.id.take(8)}…\n" + extra
+            }
         }
 
         root.addView(title)
