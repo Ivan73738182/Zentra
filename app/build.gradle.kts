@@ -45,4 +45,5 @@ android {
 
 dependencies {
     implementation(files("libs/libv2ray.aar"))
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
 }

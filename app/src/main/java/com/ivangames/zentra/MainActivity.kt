@@ -1,13 +1,14 @@
 package com.ivangames.zentra
 
 import android.app.Activity
-import android.content.Intent
-import android.net.VpnService
+import android.app.AlertDialog
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.net.VpnService
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -17,11 +18,23 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.google.zxing.integration.android.IntentIntegrator
+import java.net.InetSocketAddress
+import java.net.Socket
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 class MainActivity : Activity() {
 
     private var server: Server? = null
+    private var currentLink: String = ""
     private var subLinks: List<String> = emptyList()
+    private var subInfo: SubInfo? = null
+    private val pings = ConcurrentHashMap<String, Long>()
+    private var onScan: (String) -> Unit = {}
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
     private fun c(hex: String) = Color.parseColor(hex)
@@ -39,13 +52,19 @@ class MainActivity : Activity() {
             setStroke(dp(strokeDp), c(stroke))
         }
 
-    private fun styleButton(b: Button, fill: String, text: String) {
+    private fun styleButton(b: Button, fill: String) {
         b.background = rounded(fill, 14)
-        b.setTextColor(c(text))
+        b.setTextColor(Color.WHITE)
         b.isAllCaps = false
         b.stateListAnimator = null
-        b.textSize = 15f
+        b.textSize = 14f
+        b.setPadding(0, 0, 0, 0)
     }
+
+    private fun mp(top: Int): LinearLayout.LayoutParams =
+        LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = dp(top) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -59,10 +78,9 @@ class MainActivity : Activity() {
                 GradientDrawable.Orientation.TOP_BOTTOM,
                 intArrayOf(c("#0B0F1A"), c("#121B33"))
             )
-            setPadding(dp(20), dp(48), dp(20), dp(20))
+            setPadding(dp(20), dp(40), dp(20), dp(20))
         }
 
-        // Заголовок
         val title = TextView(this).apply {
             text = "ZENTRA"
             textSize = 26f
@@ -72,17 +90,15 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
         }
         val subtitle = TextView(this).apply {
-            text = "Вставь ссылку — и всё готово"
+            text = "Вставь ссылку или отсканируй QR"
             textSize = 13f
             setTextColor(c("#7C879E"))
             gravity = Gravity.CENTER
         }
         root.addView(title)
         root.addView(subtitle)
-
         root.addView(View(this), LinearLayout.LayoutParams(1, 0, 1f))
 
-        // Большая кнопка
         val ring = View(this).apply { background = circle("#0F1730", "#26365F", 2) }
         val power = TextView(this).apply {
             text = "ПУСК"
@@ -98,7 +114,6 @@ class MainActivity : Activity() {
         powerBox.addView(power, FrameLayout.LayoutParams(dp(170), dp(170), Gravity.CENTER))
         root.addView(powerBox, LinearLayout.LayoutParams(dp(220), dp(220)))
 
-        // Статус
         val status = TextView(this).apply {
             text = "Не подключено"
             textSize = 20f
@@ -112,12 +127,9 @@ class MainActivity : Activity() {
             setTextColor(c("#7C879E"))
             gravity = Gravity.CENTER
         }
-        root.addView(status, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-        ).apply { topMargin = dp(24) })
+        root.addView(status, mp(20))
         root.addView(hintText)
 
-        // Карточка сервера
         val serverName = TextView(this).apply {
             textSize = 16f
             typeface = Typeface.DEFAULT_BOLD
@@ -130,20 +142,33 @@ class MainActivity : Activity() {
         val serverCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = rounded("#151C2E", 20)
-            setPadding(dp(18), dp(14), dp(18), dp(14))
+            setPadding(dp(18), dp(12), dp(18), dp(12))
             visibility = View.GONE
             addView(serverName)
             addView(serverInfo)
         }
-        root.addView(serverCard, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-        ).apply { topMargin = dp(20) })
+        root.addView(serverCard, mp(16))
+
+        val infoText = TextView(this).apply {
+            textSize = 13f
+            setTextColor(c("#9FB0D0"))
+            gravity = Gravity.CENTER
+            visibility = View.GONE
+        }
+        root.addView(infoText, mp(10))
+
+        val pingBtn = Button(this).apply { text = "⚡ Проверить пинг" }
+        styleButton(pingBtn, "#1B2338")
+        root.addView(
+            pingBtn,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44))
+                .apply { topMargin = dp(8) }
+        )
 
         root.addView(View(this), LinearLayout.LayoutParams(1, 0, 1f))
 
-        // Нижняя панель
         val input = EditText(this).apply {
-            hint = "vless:// vmess:// trojan://"
+            hint = "vless:// или https://"
             setHintTextColor(c("#5B667D"))
             setTextColor(Color.WHITE)
             textSize = 14f
@@ -152,13 +177,16 @@ class MainActivity : Activity() {
             setPadding(dp(14), dp(12), dp(14), dp(12))
         }
         val pasteBtn = Button(this).apply { text = "Вставить" }
+        val qrBtn = Button(this).apply { text = "QR" }
         val applyBtn = Button(this).apply { text = "Применить" }
-        styleButton(pasteBtn, "#1B2338", "#FFFFFF")
-        styleButton(applyBtn, "#4F8CFF", "#FFFFFF")
+        styleButton(pasteBtn, "#1B2338")
+        styleButton(qrBtn, "#1B2338")
+        styleButton(applyBtn, "#4F8CFF")
 
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             addView(pasteBtn, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(8) })
+            addView(qrBtn, LinearLayout.LayoutParams(0, dp(48), 0.7f).apply { rightMargin = dp(8) })
             addView(applyBtn, LinearLayout.LayoutParams(0, dp(48), 1f))
         }
         val panel = LinearLayout(this).apply {
@@ -166,72 +194,135 @@ class MainActivity : Activity() {
             background = rounded("#151C2E", 20)
             setPadding(dp(14), dp(14), dp(14), dp(14))
             addView(input)
-            addView(row, LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = dp(10) })
+            addView(row, mp(10))
         }
-        root.addView(panel, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-        ))
+        root.addView(panel, mp(0))
 
-        // Логика
-        fun applyLink() {
-            val raw0 = input.text.toString().trim()
-            if (raw0.startsWith("http://") || raw0.startsWith("https://")) {
-                status.text = "Загружаю подписку…"
-                status.setTextColor(Color.WHITE)
-                Subscription.fetch(raw0) { links ->
-                    runOnUiThread {
-                        subLinks = links
-                        input.setText(links.firstOrNull() ?: "-")
-                        applyLink()
-                        if (links.size > 1) hintText.text = "Нажми ПУСК · карточка сервера — выбор (" + links.size + ")"
-                    }
-                }
+        // ---------- логика ----------
+
+        fun showInfo() {
+            val i = subInfo
+            if (i == null) {
+                infoText.visibility = View.GONE
                 return
             }
-            val s = LinkParser.parse(input.text.toString())
+            val used = String.format(Locale.US, "%.2f GB", i.used / 1073741824.0)
+            val total = if (i.total > 0) String.format(Locale.US, "%.0f GB", i.total / 1073741824.0) else "∞"
+            var t = "Трафик: " + used + " / " + total
+            if (i.expire > 0) {
+                t += "  ·  до " + SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(Date(i.expire * 1000))
+            }
+            infoText.text = t
+            infoText.visibility = View.VISIBLE
+        }
+
+        fun pingText(link: String): String {
+            val v = pings[link] ?: return ""
+            return if (v < 0) "  ·  нет ответа" else "  ·  " + v + " мс"
+        }
+
+        fun showServer() {
+            val s = server
+            if (s == null) {
+                serverCard.visibility = View.GONE
+                return
+            }
+            serverName.text = if (s.name.isNotEmpty()) s.name else s.host
+            serverInfo.text = s.protocol.uppercase() + " · " + s.host + ":" + s.port + pingText(currentLink)
+            serverCard.visibility = View.VISIBLE
+        }
+
+        fun selectLink(link: String) {
+            val s = LinkParser.parse(link)
             if (s == null) {
                 server = null
-                serverCard.visibility = View.GONE
+                currentLink = ""
+                showServer()
                 status.text = "Не удалось распознать ссылку"
                 status.setTextColor(c("#FF6B6B"))
                 hintText.text = "Проверь, что ссылка скопирована целиком"
                 power.background = circle("#162040", "#4F8CFF", 4)
-            } else {
-                server = s
-                serverName.text = if (s.name.isNotEmpty()) s.name else s.host
-                serverInfo.text = "${s.protocol.uppercase()} · ${s.host}:${s.port}"
-                serverCard.visibility = View.VISIBLE
-                status.text = "Сервер выбран"
-                status.setTextColor(c("#3DDC97"))
-                hintText.text = "Нажми ПУСК"
-                power.background = circle("#12302A", "#3DDC97", 4)
+                return
             }
+            server = s
+            currentLink = link
+            showServer()
+            status.text = "Сервер выбран"
+            status.setTextColor(c("#3DDC97"))
+            hintText.text = if (ZentraVpnService.running) "Нажми СТОП и ПУСК, чтобы переключиться"
+            else if (subLinks.size > 1) "Нажми ПУСК · карточка — выбор из " + subLinks.size
+            else "Нажми ПУСК"
+            power.background = circle("#12302A", "#3DDC97", 4)
         }
 
-        pasteBtn.setOnClickListener {
-            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            val t = cm.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
-            input.setText(t)
-            applyLink()
-        }
-        applyBtn.setOnClickListener { applyLink() }
-
-        serverCard.setOnClickListener {
-            if (subLinks.size > 1) {
-                val names = subLinks.map { l ->
-                    val p = LinkParser.parse(l)
-                    if (p == null) "?" else if (p.name.isNotEmpty()) p.name else p.host
-                }.toTypedArray()
-                android.app.AlertDialog.Builder(this)
-                    .setTitle("Выбери сервер")
-                    .setItems(names) { _, i ->
-                        input.setText(subLinks[i])
-                        applyLink()
+        fun applyLink() {
+            val raw = input.text.toString().trim()
+            if (raw.startsWith("http://") || raw.startsWith("https://")) {
+                status.text = "Загружаю подписку…"
+                status.setTextColor(Color.WHITE)
+                Subscription.fetch(raw) { res ->
+                    runOnUiThread {
+                        subLinks = res.links
+                        subInfo = res.info
+                        pings.clear()
+                        showInfo()
+                        if (res.links.isEmpty()) {
+                            server = null
+                            showServer()
+                            status.text = "Не удалось загрузить подписку"
+                            status.setTextColor(c("#FF6B6B"))
+                            hintText.text = "Проверь ссылку и интернет"
+                        } else {
+                            selectLink(res.links[0])
+                        }
                     }
-                    .show()
+                }
+                return
             }
+            subLinks = emptyList()
+            subInfo = null
+            showInfo()
+            selectLink(raw)
+        }
+
+        fun runPing() {
+            val list = if (subLinks.isNotEmpty()) subLinks else listOf(currentLink).filter { it.isNotEmpty() }
+            if (list.isEmpty()) {
+                status.text = "Сначала вставь ссылку"
+                status.setTextColor(c("#FF6B6B"))
+                return
+            }
+            pingBtn.text = "Проверяю…"
+            pingBtn.isEnabled = false
+            val left = AtomicInteger(list.size)
+            for (l in list) {
+                Thread {
+                    val p = LinkParser.parse(l)
+                    var ms = -1L
+                    if (p != null) {
+                        try {
+                            val t0 = System.nanoTime()
+                            Socket().use { it.connect(InetSocketAddress(p.host, p.port), 3000) }
+                            ms = (System.nanoTime() - t0) / 1000000
+                        } catch (e: Exception) {
+                            ms = -1L
+                        }
+                    }
+                    pings[l] = ms
+                    if (left.decrementAndGet() == 0) {
+                        runOnUiThread {
+                            pingBtn.text = "⚡ Проверить пинг"
+                            pingBtn.isEnabled = true
+                            showServer()
+                        }
+                    }
+                }.start()
+            }
+        }
+
+        onScan = { t ->
+            input.setText(t.trim())
+            applyLink()
         }
 
         ZentraVpnService.listener = { on, msg ->
@@ -249,6 +340,7 @@ class MainActivity : Activity() {
                 }
             }
         }
+
         power.setOnClickListener {
             if (ZentraVpnService.running) {
                 startService(Intent(this, ZentraVpnService::class.java).setAction(ZentraVpnService.ACTION_STOP))
@@ -260,15 +352,42 @@ class MainActivity : Activity() {
                 if (prep != null) startActivityForResult(prep, 100) else startVpn()
             }
         }
-        val unusedOld = View.OnClickListener {
-            if (server == null) {
-                status.text = "Сначала вставь ссылку"
-                status.setTextColor(c("#FF6B6B"))
-            } else {
-                status.text = "Подключение будет на следующем шаге"
-                status.setTextColor(Color.WHITE)
+
+        serverCard.setOnClickListener {
+            if (subLinks.size > 1) {
+                val names = subLinks.map { l ->
+                    val p = LinkParser.parse(l)
+                    val n = if (p == null) "?" else if (p.name.isNotEmpty()) p.name else p.host
+                    (if (l == currentLink) "● " else "○ ") + n + pingText(l)
+                }.toTypedArray()
+                AlertDialog.Builder(this)
+                    .setTitle("Выбери сервер")
+                    .setItems(names) { _, i -> selectLink(subLinks[i]) }
+                    .show()
             }
         }
+
+        pingBtn.setOnClickListener { runPing() }
+
+        pasteBtn.setOnClickListener {
+            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val t = cm.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
+            input.setText(t)
+            applyLink()
+        }
+
+        qrBtn.setOnClickListener {
+            IntentIntegrator(this)
+                .setDesiredBarcodeFormats(IntentIntegrator.QR_CODE)
+                .setOrientationLocked(false)
+                .setBeepEnabled(false)
+                .setPrompt("Наведи на QR-код")
+                .initiateScan()
+        }
+
+        applyBtn.setOnClickListener { applyLink() }
+
+        if (ZentraVpnService.running) ZentraVpnService.listener?.invoke(true, "")
 
         setContentView(root)
     }
@@ -284,6 +403,11 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == 100 && resultCode == RESULT_OK) startVpn()
+        if (requestCode == 100 && resultCode == RESULT_OK) {
+            startVpn()
+            return
+        }
+        val r = IntentIntegrator.parseActivityResult(requestCode, resultCode, data)
+        if (r != null && r.contents != null) onScan(r.contents)
     }
 }
