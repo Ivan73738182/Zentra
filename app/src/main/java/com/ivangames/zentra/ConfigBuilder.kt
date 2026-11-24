@@ -6,6 +6,7 @@ import org.json.JSONObject
 object ConfigBuilder {
 
     fun build(s: Server): String {
+        if (s.protocol == "shadowsocks" || s.protocol == "hysteria") return ConfigExtra.build(s)
         val p = s.params
         var net = p["type"] ?: p["net"] ?: "tcp"
         if (net == "splithttp") net = "xhttp"

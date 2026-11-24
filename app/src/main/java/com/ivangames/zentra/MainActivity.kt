@@ -168,7 +168,7 @@ class MainActivity : Activity() {
         root.addView(View(this), LinearLayout.LayoutParams(1, 0, 1f))
 
         val input = EditText(this).apply {
-            hint = "vless:// или https://"
+            hint = "Ссылка"
             setHintTextColor(c("#5B667D"))
             setTextColor(Color.WHITE)
             textSize = 14f
@@ -256,7 +256,20 @@ class MainActivity : Activity() {
         }
 
         fun applyLink() {
-            val raw = input.text.toString().trim()
+            var raw = input.text.toString().trim()
+            if (!raw.startsWith("http") && LinkParser.parse(raw) == null && raw.contains("http")) {
+                val cut = raw.substring(raw.indexOf("http"))
+                raw = try { java.net.URLDecoder.decode(cut, "UTF-8") } catch (e: Exception) { cut }
+            }
+            val found = raw.lines().map { it.trim() }.filter { LinkParser.parse(it) != null }
+            if (found.size > 1) {
+                subLinks = found
+                subInfo = null
+                pings.clear()
+                showInfo()
+                selectLink(found[0])
+                return
+            }
             if (raw.startsWith("http://") || raw.startsWith("https://")) {
                 status.text = "Загружаю подписку…"
                 status.setTextColor(Color.WHITE)
@@ -327,6 +340,7 @@ class MainActivity : Activity() {
 
         ZentraVpnService.listener = { on, msg ->
             runOnUiThread {
+                panel.visibility = if (on) View.GONE else View.VISIBLE
                 if (on) {
                     status.text = "Подключено"
                     status.setTextColor(c("#3DDC97"))
