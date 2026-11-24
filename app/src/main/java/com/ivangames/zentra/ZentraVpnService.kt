@@ -41,7 +41,7 @@ class ZentraVpnService : VpnService(), CoreCallbackHandler {
 
     private fun startCore(config: String) {
         try {
-            Libv2ray.initCoreEnv(filesDir.absolutePath, "zentra")
+            Libv2ray.initCoreEnv(filesDir.absolutePath, android.util.Base64.encodeToString(ByteArray(32).also { java.security.SecureRandom().nextBytes(it) }, android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP))
             val pfd = Builder()
                 .setSession("Zentra")
                 .setMtu(1500)
