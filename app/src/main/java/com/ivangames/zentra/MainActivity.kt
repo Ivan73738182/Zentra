@@ -21,6 +21,7 @@ import android.widget.TextView
 class MainActivity : Activity() {
 
     private var server: Server? = null
+    private var subLinks: List<String> = emptyList()
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
     private fun c(hex: String) = Color.parseColor(hex)
@@ -181,8 +182,10 @@ class MainActivity : Activity() {
                 status.setTextColor(Color.WHITE)
                 Subscription.fetch(raw0) { links ->
                     runOnUiThread {
+                        subLinks = links
                         input.setText(links.firstOrNull() ?: "-")
                         applyLink()
+                        if (links.size > 1) hintText.text = "Нажми ПУСК · карточка сервера — выбор (" + links.size + ")"
                     }
                 }
                 return
@@ -214,6 +217,22 @@ class MainActivity : Activity() {
             applyLink()
         }
         applyBtn.setOnClickListener { applyLink() }
+
+        serverCard.setOnClickListener {
+            if (subLinks.size > 1) {
+                val names = subLinks.map { l ->
+                    val p = LinkParser.parse(l)
+                    if (p == null) "?" else if (p.name.isNotEmpty()) p.name else p.host
+                }.toTypedArray()
+                android.app.AlertDialog.Builder(this)
+                    .setTitle("Выбери сервер")
+                    .setItems(names) { _, i ->
+                        input.setText(subLinks[i])
+                        applyLink()
+                    }
+                    .show()
+            }
+        }
 
         ZentraVpnService.listener = { on, msg ->
             runOnUiThread {
