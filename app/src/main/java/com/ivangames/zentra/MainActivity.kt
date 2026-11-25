@@ -109,6 +109,14 @@ class MainActivity : Activity() {
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
         }
+        val deleteBtn = TextView(this).apply {
+            text = "✕"
+            textSize = 22f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(c("#FF6B6B"))
+            gravity = Gravity.CENTER
+            background = circle("#162040", "#FF6B6B", 2)
+        }
         val plusBtn = TextView(this).apply {
             text = "+"
             textSize = 26f
@@ -119,6 +127,9 @@ class MainActivity : Activity() {
         }
         header.addView(title, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ))
+        header.addView(deleteBtn, FrameLayout.LayoutParams(
+            dp(44), dp(44), Gravity.START or Gravity.CENTER_VERTICAL
         ))
         header.addView(plusBtn, FrameLayout.LayoutParams(
             dp(44), dp(44), Gravity.END or Gravity.CENTER_VERTICAL
@@ -193,6 +204,32 @@ class MainActivity : Activity() {
 
         root.addView(View(this), LinearLayout.LayoutParams(1, 0, 1f))
 
+        deleteBtn.setOnClickListener {
+            if (serverList.isEmpty()) {
+                Toast.makeText(this, "Список уже пуст", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            AlertDialog.Builder(this)
+                .setTitle("Удалить всю подписку?")
+                .setMessage("Все серверы будут удалены из списка.")
+                .setPositiveButton("Удалить") { _, _ ->
+                    serverList.clear()
+                    serverLinks.clear()
+                    selectedIdx = -1
+                    subInfo = null
+                    pings.clear()
+                    saveAll()
+                    updateCards()
+                    status.text = "Сервер не выбран"
+                    status.setTextColor(c("#7C879E"))
+                    hintText.text = "Нажми +"
+                    power.background = circle("#162040", "#4F8CFF", 4)
+                    infoText.visibility = View.GONE
+                }
+                .setNegativeButton("Отмена", null)
+                .show()
+        }
+
         plusBtn.setOnClickListener { showAddDialog(null) }
         pingBtn.setOnClickListener { runPing() }
 
@@ -259,20 +296,17 @@ class MainActivity : Activity() {
             val s = serverList[i]
             val sel = i == selectedIdx
             
-            val card = FrameLayout(this).apply {
-                background = if (sel) roundedStroke("#12302A", "#3DDC97", 2, 20) else rounded("#151C2E", 20)
-                setPadding(dp(16), dp(14), dp(48), dp(14))
-                setOnClickListener { selectServer(i) }
-            }
-
-            val textLayout = LinearLayout(this).apply {
+            val card = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
+                background = if (sel) roundedStroke("#12302A", "#3DDC97", 2, 20) else rounded("#151C2E", 20)
+                setPadding(dp(16), dp(14), dp(16), dp(14))
+                setOnClickListener { selectServer(i) }
                 addView(TextView(this@MainActivity).apply {
                     text = if (s.name.isNotEmpty()) s.name else s.host
                     textSize = 15f
                     typeface = Typeface.DEFAULT_BOLD
                     setTextColor(Color.WHITE)
-                    maxLines = 2 
+                    maxLines = 2
                 })
                 addView(TextView(this@MainActivity).apply {
                     text = s.protocol.uppercase() + " · " + s.host + ":" + s.port + pingText(serverLinks[i])
@@ -280,48 +314,6 @@ class MainActivity : Activity() {
                     setTextColor(c("#7C879E"))
                 })
             }
-            card.addView(textLayout, FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER_VERTICAL
-            ))
-
-            val deleteBtn = TextView(this).apply {
-                text = "✕"
-                textSize = 16f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(c("#FF6B6B"))
-                gravity = Gravity.CENTER
-                background = circle("#1B2338", "#FF6B6B", 1)
-            }
-            card.addView(deleteBtn, FrameLayout.LayoutParams(dp(32), dp(32), Gravity.TOP or Gravity.END).apply {
-                topMargin = dp(4)
-                rightMargin = dp(4)
-            })
-
-            deleteBtn.setOnClickListener {
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("Удалить сервер?")
-                    .setPositiveButton("Удалить") { _, _ ->
-                        serverList.removeAt(i)
-                        serverLinks.removeAt(i)
-                        if (serverList.isEmpty()) {
-                            selectedIdx = -1
-                        } else if (selectedIdx == i) {
-                            selectedIdx = if (i > 0) i - 1 else 0
-                        } else if (selectedIdx > i) {
-                            selectedIdx--
-                        }
-                        saveAll()
-                        updateCards()
-                        if (selectedIdx >= 0) selectServer(selectedIdx) else {
-                            status.text = "Сервер не выбран"
-                            status.setTextColor(c("#7C879E"))
-                            power.background = circle("#162040", "#4F8CFF", 4)
-                        }
-                    }
-                    .setNegativeButton("Отмена", null)
-                    .show()
-            }
-
             scrollRow.addView(card, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply { bottomMargin = dp(10) })
