@@ -18,6 +18,7 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import com.google.zxing.integration.android.IntentIntegrator
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -35,6 +36,15 @@ class MainActivity : Activity() {
     private var subInfo: SubInfo? = null
     private val pings = ConcurrentHashMap<String, Long>()
     private var onScan: (String) -> Unit = {}
+
+    // SharedPreferences для сохранения ссылки
+    private val prefs by lazy { getSharedPreferences("zentra_prefs", Context.MODE_PRIVATE) }
+    private fun saveLink(link: String) {
+        prefs.edit().putString("saved_link", link).apply()
+    }
+    private fun getSavedLink(): String? {
+        return prefs.getString("saved_link", null)
+    }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
     private fun c(hex: String) = Color.parseColor(hex)
@@ -257,6 +267,11 @@ class MainActivity : Activity() {
 
         fun applyLink() {
             var raw = input.text.toString().trim()
+            if (raw.isEmpty()) return
+            
+            // Гарантируем, что панель НЕ исчезает после нажатия
+            panel.visibility = View.VISIBLE 
+
             if (!raw.startsWith("http") && LinkParser.parse(raw) == null && raw.contains("http")) {
                 val cut = raw.substring(raw.indexOf("http"))
                 raw = try { java.net.URLDecoder.decode(cut, "UTF-8") } catch (e: Exception) { cut }
@@ -268,6 +283,7 @@ class MainActivity : Activity() {
                 pings.clear()
                 showInfo()
                 selectLink(found[0])
+                saveLink(raw) // Сохраняем
                 return
             }
             if (raw.startsWith("http://") || raw.startsWith("https://")) {
@@ -287,7 +303,9 @@ class MainActivity : Activity() {
                             hintText.text = "Проверь ссылку и интернет"
                         } else {
                             selectLink(res.links[0])
+                            saveLink(raw) // Сохраняем
                         }
+                        panel.visibility = View.VISIBLE // Возвращаем панель
                     }
                 }
                 return
@@ -296,6 +314,7 @@ class MainActivity : Activity() {
             subInfo = null
             showInfo()
             selectLink(raw)
+            saveLink(raw) // Сохраняем обычную ссылку
         }
 
         fun runPing() {
@@ -335,11 +354,13 @@ class MainActivity : Activity() {
 
         onScan = { t ->
             input.setText(t.trim())
+            Toast.makeText(this, "QR отсканирован! Применяю...", Toast.LENGTH_SHORT).show()
             applyLink()
         }
 
         ZentraVpnService.listener = { on, msg ->
             runOnUiThread {
+                // Панель скрываем ТОЛЬКО когда реально подключено (on == true)
                 panel.visibility = if (on) View.GONE else View.VISIBLE
                 if (on) {
                     status.text = "Подключено"
@@ -395,11 +416,18 @@ class MainActivity : Activity() {
                 .setDesiredBarcodeFormats(IntentIntegrator.QR_CODE)
                 .setOrientationLocked(false)
                 .setBeepEnabled(false)
-                .setPrompt("Наведи на QR-код")
+                .setPrompt("Наведи на QR-код ссылки")
                 .initiateScan()
         }
 
         applyBtn.setOnClickListener { applyLink() }
+
+        // АВТОЗАГРУЗКА: если есть сохраненная ссылка, применяем её сразу
+        val savedLink = getSavedLink()
+        if (!savedLink.isNullOrEmpty()) {
+            input.setText(savedLink)
+            applyLink()
+        }
 
         if (ZentraVpnService.running) ZentraVpnService.listener?.invoke(true, "")
 
