@@ -100,16 +100,15 @@ class MainActivity : Activity() {
             setPadding(dp(20), dp(40), dp(20), dp(20))
         }
 
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
+        // ---------- верх: ZENTRA по центру, "+" в правом углу ----------
+        val header = FrameLayout(this)
         val title = TextView(this).apply {
             text = "ZENTRA"
             textSize = 26f
             typeface = Typeface.DEFAULT_BOLD
             letterSpacing = 0.25f
             setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
         }
         val plusBtn = TextView(this).apply {
             text = "+"
@@ -119,9 +118,13 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
             background = circle("#162040", "#4F8CFF", 2)
         }
-        header.addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        header.addView(plusBtn, LinearLayout.LayoutParams(dp(44), dp(44)))
-        
+        header.addView(title, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ))
+        header.addView(plusBtn, FrameLayout.LayoutParams(
+            dp(44), dp(44), Gravity.END or Gravity.CENTER_VERTICAL
+        ))
+
         val subtitle = TextView(this).apply {
             text = "Вставь ссылку или отсканируй QR"
             textSize = 13f
@@ -191,7 +194,6 @@ class MainActivity : Activity() {
 
         root.addView(View(this), LinearLayout.LayoutParams(1, 0, 1f))
 
-        // Обработчики нажатий
         plusBtn.setOnClickListener { showAddDialog(null) }
         pingBtn.setOnClickListener { runPing() }
 
