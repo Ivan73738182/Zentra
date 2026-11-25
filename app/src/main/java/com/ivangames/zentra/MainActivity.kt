@@ -17,8 +17,8 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
-import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import com.google.zxing.integration.android.IntentIntegrator
@@ -46,7 +46,7 @@ class MainActivity : Activity() {
     private lateinit var infoText: TextView
     private lateinit var pingBtn: Button
     private lateinit var scrollRow: LinearLayout
-    private lateinit var scroll: HorizontalScrollView
+    private lateinit var scroll: ScrollView
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
     private fun c(hex: String) = Color.parseColor(hex)
@@ -100,7 +100,6 @@ class MainActivity : Activity() {
             setPadding(dp(20), dp(40), dp(20), dp(20))
         }
 
-        // ---------- верх: ZENTRA по центру, "+" в правом углу ----------
         val header = FrameLayout(this)
         val title = TextView(this).apply {
             text = "ZENTRA"
@@ -167,10 +166,10 @@ class MainActivity : Activity() {
         root.addView(hintText)
 
         scrollRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = LinearLayout.VERTICAL
         }
-        scroll = HorizontalScrollView(this).apply {
-            isHorizontalScrollBarEnabled = false
+        scroll = ScrollView(this).apply {
+            isVerticalScrollBarEnabled = false
             addView(scrollRow)
             visibility = View.GONE
         }
@@ -255,30 +254,77 @@ class MainActivity : Activity() {
         scrollRow.removeAllViews()
         if (serverList.isEmpty()) { scroll.visibility = View.GONE; return }
         scroll.visibility = View.VISIBLE
+        
         for (i in serverList.indices) {
             val s = serverList[i]
             val sel = i == selectedIdx
-            val card = LinearLayout(this).apply {
+            
+            val card = FrameLayout(this).apply {
+                background = if (sel) roundedStroke("#12302A", "#3DDC97", 2, 20) else rounded("#151C2E", 20)
+                setPadding(dp(16), dp(14), dp(48), dp(14))
+                setOnClickListener { selectServer(i) }
+            }
+
+            val textLayout = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                background = if (sel) roundedStroke("#12302A", "#3DDC97", 2, 20)
-                             else rounded("#151C2E", 20)
-                setPadding(dp(16), dp(12), dp(16), dp(12))
                 addView(TextView(this@MainActivity).apply {
                     text = if (s.name.isNotEmpty()) s.name else s.host
                     textSize = 15f
                     typeface = Typeface.DEFAULT_BOLD
                     setTextColor(Color.WHITE)
+                    maxLines = 2 
                 })
                 addView(TextView(this@MainActivity).apply {
                     text = s.protocol.uppercase() + " · " + s.host + ":" + s.port + pingText(serverLinks[i])
                     textSize = 12f
                     setTextColor(c("#7C879E"))
                 })
-                setOnClickListener { selectServer(i) }
             }
-            scrollRow.addView(card, LinearLayout.LayoutParams(dp(200), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                rightMargin = dp(10)
+            card.addView(textLayout, FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER_VERTICAL
+            ))
+
+            val deleteBtn = TextView(this).apply {
+                text = "✕"
+                textSize = 16f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(c("#FF6B6B"))
+                gravity = Gravity.CENTER
+                background = circle("#1B2338", "#FF6B6B", 1)
+            }
+            card.addView(deleteBtn, FrameLayout.LayoutParams(dp(32), dp(32), Gravity.TOP or Gravity.END).apply {
+                topMargin = dp(4)
+                rightMargin = dp(4)
             })
+
+            deleteBtn.setOnClickListener {
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("Удалить сервер?")
+                    .setPositiveButton("Удалить") { _, _ ->
+                        serverList.removeAt(i)
+                        serverLinks.removeAt(i)
+                        if (serverList.isEmpty()) {
+                            selectedIdx = -1
+                        } else if (selectedIdx == i) {
+                            selectedIdx = if (i > 0) i - 1 else 0
+                        } else if (selectedIdx > i) {
+                            selectedIdx--
+                        }
+                        saveAll()
+                        updateCards()
+                        if (selectedIdx >= 0) selectServer(selectedIdx) else {
+                            status.text = "Сервер не выбран"
+                            status.setTextColor(c("#7C879E"))
+                            power.background = circle("#162040", "#4F8CFF", 4)
+                        }
+                    }
+                    .setNegativeButton("Отмена", null)
+                    .show()
+            }
+
+            scrollRow.addView(card, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = dp(10) })
         }
     }
 
@@ -288,8 +334,7 @@ class MainActivity : Activity() {
         updateCards()
         status.text = "Сервер выбран"
         status.setTextColor(c("#3DDC97"))
-        hintText.text = if (ZentraVpnService.running) "Нажми СТОП и ПУСК, чтобы переключиться"
-                        else "Нажми ПУСК"
+        hintText.text = if (ZentraVpnService.running) "Нажми СТОП и ПУСК, чтобы переключиться" else "Нажми ПУСК"
         power.background = circle("#12302A", "#3DDC97", 4)
     }
 
@@ -437,8 +482,7 @@ class MainActivity : Activity() {
     }
 
     private fun ensureCameraThenScan() {
-        if (checkSelfPermission(android.Manifest.permission.CAMERA)
-            != PackageManager.PERMISSION_GRANTED) {
+        if (checkSelfPermission(android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(android.Manifest.permission.CAMERA), 200)
             return
         }
